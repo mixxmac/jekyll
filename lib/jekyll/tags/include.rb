@@ -1,3 +1,5 @@
+# encoding: UTF-8
+
 module Jekyll
   module Tags
     class IncludeTagError < StandardError
@@ -11,16 +13,27 @@ module Jekyll
 
     class IncludeTag < Liquid::Tag
 
-      SYNTAX_EXAMPLE = "{% include file.ext param='value' param2='value' %}"
+      attr_reader :includes_dir
 
       VALID_SYNTAX = /([\w-]+)\s*=\s*(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|([\w\.-]+))/
-
-      INCLUDES_DIR = '_includes'
+      VARIABLE_SYNTAX = /(?<variable>[^{]*\{\{\s*(?<name>[\w\-\.]+)\s*(\|.*)?\}\}[^\s}]*)(?<params>.*)/
 
       def initialize(tag_name, markup, tokens)
         super
-        @file, @params = markup.strip.split(' ', 2);
+        @includes_dir = tag_includes_dir
+        matched = markup.strip.match(VARIABLE_SYNTAX)
+        if matched
+          @file = matched['variable'].strip
+          @params = matched['params'].strip
+        else
+          @file, @params = markup.strip.split(' ', 2);
+        end
         validate_params if @params
+        @tag_name = tag_name
+      end
+
+      def syntax_example
+        "{% #{@tag_name} file.ext param='value' param2='value' %}"
       end
 
       def parse_params(context)
@@ -48,11 +61,11 @@ module Jekyll
             raise ArgumentError.new <<-eos
 Invalid syntax for include tag. File contains invalid characters or sequences:
 
-	#{@file}
+  #{file}
 
 Valid syntax:
 
-	#{SYNTAX_EXAMPLE}
+  #{syntax_example}
 
 eos
         end
@@ -64,11 +77,11 @@ eos
           raise ArgumentError.new <<-eos
 Invalid syntax for include tag:
 
-	#{@params}
+  #{@params}
 
 Valid syntax:
 
-	#{SYNTAX_EXAMPLE}
+  #{syntax_example}
 
 eos
         end
@@ -79,59 +92,89 @@ eos
         context.registers[:site].file_read_opts
       end
 
-      def retrieve_variable(context)
-        if /\{\{([\w\-\.]+)\}\}/ =~ @file
-          raise ArgumentError.new("No variable #{$1} was found in include tag") if context[$1].nil?
-          context[$1]
+      # Render the variable if required
+      def render_variable(context)
+        if @file.match(VARIABLE_SYNTAX)
+          partial = Liquid::Template.parse(@file)
+          partial.render!(context)
         end
       end
 
-      def render(context)
-        dir = File.join(context.registers[:site].source, INCLUDES_DIR)
-        validate_dir(dir, context.registers[:site].safe)
+      def tag_includes_dir
+        '_includes'.freeze
+      end
 
-        file = retrieve_variable(context) || @file
+      def render(context)
+        site = context.registers[:site]
+        dir = resolved_includes_dir(context)
+
+        file = render_variable(context) || @file
         validate_file_name(file)
 
         path = File.join(dir, file)
-        validate_file(path, context.registers[:site].safe)
+        validate_path(path, dir, site.safe)
+
+        # Add include to dependency tree
+        if context.registers[:page] and context.registers[:page].has_key? "path"
+          site.regenerator.add_dependency(
+            site.in_source_dir(context.registers[:page]["path"]),
+            path
+          )
+        end
 
         begin
-          partial = Liquid::Template.parse(source(path, context))
+          partial = Liquid::Template.parse(read_file(path, context))
 
           context.stack do
             context['include'] = parse_params(context) if @params
             partial.render!(context)
           end
         rescue => e
-          raise IncludeTagError.new e.message, File.join(INCLUDES_DIR, @file)
+          raise IncludeTagError.new e.message, File.join(@includes_dir, @file)
         end
       end
 
-      def validate_dir(dir, safe)
-        if File.symlink?(dir) && safe
-          raise IOError.new "Includes directory '#{dir}' cannot be a symlink"
+      def resolved_includes_dir(context)
+        context.registers[:site].in_source_dir(@includes_dir)
+      end
+
+      def validate_path(path, dir, safe)
+        if safe && !realpath_prefixed_with?(path, dir)
+          raise IOError.new "The included file '#{path}' should exist and should not be a symlink"
+        elsif !File.exist?(path)
+          raise IOError.new "Included file '#{path_relative_to_source(dir, path)}' not found"
         end
       end
 
-      def validate_file(file, safe)
-        if !File.exists?(file)
-          raise IOError.new "Included file '#{@file}' not found in '#{INCLUDES_DIR}' directory"
-        elsif File.symlink?(file) && safe
-          raise IOError.new "The included file '#{INCLUDES_DIR}/#{@file}' should not be a symlink"
-        end
+      def path_relative_to_source(dir, path)
+        File.join(@includes_dir, path.sub(Regexp.new("^#{dir}"), ""))
       end
 
-      def blank?
-        false
+      def realpath_prefixed_with?(path, dir)
+        File.exist?(path) && File.realpath(path).start_with?(dir)
       end
 
       # This method allows to modify the file content by inheriting from the class.
-      def source(file, context)
+      def read_file(file, context)
         File.read(file, file_read_opts(context))
+      end
+    end
+
+    class IncludeRelativeTag < IncludeTag
+      def tag_includes_dir
+        '.'.freeze
+      end
+
+      def page_path(context)
+        context.registers[:page].nil? ? includes_dir : File.dirname(context.registers[:page]["path"])
+      end
+
+      def resolved_includes_dir(context)
+        context.registers[:site].in_source_dir(page_path(context))
       end
     end
   end
 end
 
 Liquid::Template.register_tag('include', Jekyll::Tags::IncludeTag)
+Liquid::Template.register_tag('include_relative', Jekyll::Tags::IncludeRelativeTag)

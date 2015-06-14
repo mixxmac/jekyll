@@ -4,18 +4,19 @@ Contribute
 So you've got an awesome idea to throw into Jekyll. Great! Please keep the
 following in mind:
 
-* **Contributions will not be accepted without tests.**
+* **Use https://talk.jekyllrb.com for non-technical or indirect Jekyll questions that are not bugs.**
+* **Contributions will not be accepted without tests or necessary documentation updates.**
 * If you're creating a small fix or patch to an existing feature, just a simple
   test will do. Please stay in the confines of the current test suite and use
-  [Shoulda](http://github.com/thoughtbot/shoulda/tree/master) and
-  [RR](http://github.com/btakita/rr/tree/master).
+  [Shoulda](https://github.com/thoughtbot/shoulda/tree/master) and
+  [RSpec-Mocks](https://github.com/rspec/rspec-mocks).
 * If it's a brand new feature, make sure to create a new
   [Cucumber](https://github.com/cucumber/cucumber/) feature and reuse steps
   where appropriate. Also, whipping up some documentation in your fork's `site`
   would be appreciated, and once merged it will be transferred over to the main
   `site`, jekyllrb.com.
 * If your contribution changes any Jekyll behavior, make sure to update the
-  documentation. It lives in `site/docs`. If the docs are missing information,
+  documentation. It lives in `site/_docs`. If the docs are missing information,
   please feel free to add it in. Great docs make a great project!
 * Please follow the [GitHub Ruby Styleguide](https://github.com/styleguide/ruby)
   when modifying Ruby code.
@@ -67,7 +68,7 @@ You can find the documentation for jekyllrb.com in the
 [site](https://github.com/jekyll/jekyll/tree/master/site) directory of
 Jekyll's repo on GitHub.com.
 
-All documentation pull requests should be directed at `master`.  Pull
+All documentation pull requests should be directed at `master`. Pull
 requests directed at another branch will not be accepted.
 
 The [Jekyll wiki](https://github.com/jekyll/jekyll/wiki) on GitHub
